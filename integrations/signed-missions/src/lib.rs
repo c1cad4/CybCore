@@ -46,6 +46,7 @@ pub fn signed_review_message(
     bytes
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn append_authorized_review(
     journal: &mut Journal,
     registry: &Registry,
@@ -65,6 +66,7 @@ pub fn append_authorized_review(
 
 /// Encode a signed review in a journal entry. The registered reviewer key
 /// must be available when the journal is replayed.
+#[allow(clippy::too_many_arguments)]
 pub fn append_signed_review(
     journal: &mut Journal,
     registry: &Registry,
@@ -134,7 +136,7 @@ pub fn verify_signed_review_history(journal: &Journal, registry: &Registry) -> R
             return Err("invalid signature length".into());
         }
         let mut signature = [0u8; 64];
-        for (index, pair) in hex.chunks_exact(2).enumerate() {
+        for (index, pair) in hex.as_chunks::<2>().0.iter().enumerate() {
             let digit = |byte: u8| -> Option<u8> {
                 match byte {
                     b'0'..=b'9' => Some(byte - b'0'),
