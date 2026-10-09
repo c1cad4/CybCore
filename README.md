@@ -51,16 +51,16 @@ Bootstrap использует закреплённые SHA из `components.loc
 Сохранить знание:
 
 ```bash
-curl --fail-with-body http://127.0.0.1:8010/tasks \\
-  -H 'Content-Type: application/json' \\
+curl --fail-with-body http://127.0.0.1:8010/tasks \
+  -H 'Content-Type: application/json' \
   --data '{"task_id":"observe-1","agent_ids":["keeper"],"capability":"memory.remember","content":"Пасека использует солнечную энергию","source":"журнал пасеки"}'
 ```
 
 Найти знание:
 
 ```bash
-curl --fail-with-body http://127.0.0.1:8010/tasks \\
-  -H 'Content-Type: application/json' \\
+curl --fail-with-body http://127.0.0.1:8010/tasks \
+  -H 'Content-Type: application/json' \
   --data '{"task_id":"search-1","agent_ids":["keeper"],"capability":"memory.recall","query":"солнечную"}'
 ```
 
