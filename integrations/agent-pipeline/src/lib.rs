@@ -4,8 +4,8 @@ use cybagents::{run, Agent, Budget, Task};
 use cybbrain::Memory;
 use cybmemory::Journal;
 use cybswarm::{independent_review, Evidence, Review};
-use std::time::Duration;
 use std::path::Path;
+use std::time::Duration;
 
 struct EchoAgent;
 impl Agent for EchoAgent {
@@ -58,10 +58,8 @@ pub fn execute_verified_task(input: &str) -> Result<(String, Memory, Journal), S
 /// This does not guarantee power-loss durability or factual verification.
 pub fn execute_and_persist(input: &str, path: &Path) -> Result<String, String> {
     let (output, _memory, journal) = execute_verified_task(input)?;
-    cybmemory::save(&journal, path)
-        .map_err(|err| format!("save failed: {err}"))?;
-    let restored = cybmemory::load(path)
-        .map_err(|err| format!("load failed: {err}"))?;
+    cybmemory::save(&journal, path).map_err(|err| format!("save failed: {err}"))?;
+    let restored = cybmemory::load(path).map_err(|err| format!("load failed: {err}"))?;
     if restored.entries() != journal.entries() {
         return Err("journal roundtrip mismatch".into());
     }
