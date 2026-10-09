@@ -2,7 +2,7 @@
   "repositories": [
     {
       "name": "CybAgents",
-      "commit": "71084e29442b6c8a161ca74e1d9cad834f0c3026"
+      "commit": "1c927263a37e8973cb41877c0fe3765ea08f8cb5"
     },
     {
       "name": "CybRegistry",
