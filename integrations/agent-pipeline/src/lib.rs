@@ -5,6 +5,7 @@ use cybbrain::Memory;
 use cybmemory::Journal;
 use cybswarm::{independent_review, Evidence, Review};
 use std::time::Duration;
+use std::path::Path;
 
 struct EchoAgent;
 impl Agent for EchoAgent {
@@ -52,6 +53,21 @@ pub fn execute_verified_task(input: &str) -> Result<(String, Memory, Journal), S
     Ok((output, memory, journal))
 }
 
+/// Executes the demonstration pipeline and writes its event journal to disk.
+/// A successful return means the journal was written and could be reopened.
+/// This does not guarantee power-loss durability or factual verification.
+pub fn execute_and_persist(input: &str, path: &Path) -> Result<String, String> {
+    let (output, _memory, journal) = execute_verified_task(input)?;
+    cybmemory::save(&journal, path)
+        .map_err(|err| format!("save failed: {err}"))?;
+    let restored = cybmemory::load(path)
+        .map_err(|err| format!("load failed: {err}"))?;
+    if restored.entries() != journal.entries() {
+        return Err("journal roundtrip mismatch".into());
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,6 +78,21 @@ mod tests {
         assert_eq!(result, "bees forage");
         assert_eq!(memory.search("bees").len(), 1);
         assert_eq!(journal.find_kind("review").len(), 1);
+    }
+
+    #[test]
+    fn pipeline_persists_and_recovers_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "cybcore-pipeline-{}-{}.bin",
+            std::process::id(),
+            "roundtrip"
+        ));
+        let output = execute_and_persist("test claim", &path).unwrap();
+        assert_eq!(output, "test claim");
+        let journal = cybmemory::load(&path).unwrap();
+        assert_eq!(journal.find_kind("task").len(), 1);
+        assert_eq!(journal.find_kind("review").len(), 1);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
