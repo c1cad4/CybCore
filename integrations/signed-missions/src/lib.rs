@@ -367,6 +367,45 @@ mod tests {
     }
 
     #[test]
+    fn signed_history_replay_verifies_and_rejects_duplicates() {
+        let reviewer = Identity::generate();
+        let mut registry = Registry::default();
+        registry
+            .register(AgentRecord {
+                id: "reviewer".into(),
+                public_key: reviewer.public_key(),
+                capabilities: BTreeSet::from(["approve_mission".into()]),
+            })
+            .unwrap();
+        let message = signed_review_message("r1", "worker", "proof1", true);
+        let signature = reviewer.sign(&message);
+        let mut journal = Journal::default();
+        append_signed_review(
+            &mut journal,
+            &registry,
+            "reviewer",
+            "r1",
+            "worker",
+            "proof1",
+            true,
+            &signature,
+        )
+        .unwrap();
+        verify_signed_review_history(&journal, &registry).unwrap();
+        assert!(append_signed_review(
+            &mut journal,
+            &registry,
+            "reviewer",
+            "r1",
+            "worker",
+            "proof1",
+            true,
+            &signature,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn tampered_evidence_fails() {
         let reviewer = Identity::generate();
         let signature = reviewer.sign(&approval_message("m1", "worker", "proof1"));
