@@ -153,7 +153,6 @@ pub fn verify_signed_review_history(journal: &Journal, registry: &Registry) -> R
     Ok(())
 }
 
-
 /// Compute a deterministic SHA-256 commitment to the ordered journal entries.
 /// Keep the returned digest in a separate trusted store to detect deletion or reordering.
 pub fn journal_commitment(journal: &Journal) -> [u8; 32] {
