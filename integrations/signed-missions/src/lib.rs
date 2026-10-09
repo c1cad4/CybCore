@@ -107,6 +107,62 @@ pub fn persist_signed_mission_audit(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+
+/// Rebuild a score from journaled review events.
+/// Each event id is counted once; malformed entries fail closed.
+/// The journal is assumed to have passed integrity checks before replay.
+pub fn replay_review_score(journal: &Journal, subject: &str) -> Result<i64, String> {
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    let mut score = 0i64;
+    for entry in journal.entries().iter().filter(|entry| entry.kind == "review_event") {
+        let fields: Vec<&str> = entry.payload.split('|').collect();
+        if fields.len() != 4 || fields.iter().any(|value| value.is_empty()) {
+            return Err("invalid review event".into());
+        }
+        if !seen.insert(fields[0]) {
+            return Err("duplicate review event".into());
+        }
+        if fields[1] == subject {
+            score += match fields[3] {
+                "accepted" => 1,
+                "rejected" => -1,
+                _ => return Err("invalid review decision".into()),
+            };
+        }
+    }
+    Ok(score)
+}
+
+/// Persist a new review only if the event identifier has never been recorded.
+pub fn append_review_once(
+    journal: &mut Journal,
+    event_id: &str,
+    subject: &str,
+    evidence_id: &str,
+    accepted: bool,
+) -> Result<(), String> {
+    if [event_id, subject, evidence_id]
+        .iter()
+        .any(|field| field.is_empty() || field.contains('|'))
+    {
+        return Err("invalid review field".into());
+    }
+    for entry in journal.entries().iter().filter(|entry| entry.kind == "review_event") {
+        if entry.payload.split('|').next() == Some(event_id) {
+            return Err("duplicate review event".into());
+        }
+    }
+    let decision = if accepted { "accepted" } else { "rejected" };
+    journal
+        .append(
+            "review_event",
+            &format!("{event_id}|{subject}|{evidence_id}|{decision}"),
+        )
+        .map_err(str::to_owned)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,6 +198,15 @@ mod tests {
         assert_eq!(journal.find_kind("trust").len(), 1);
         assert_eq!(journal.find_kind("growth").len(), 1);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn replay_rejects_duplicate_reviews() {
+        let mut journal = Journal::default();
+        append_review_once(&mut journal, "r1", "worker", "proof1", true).unwrap();
+        assert!(append_review_once(&mut journal, "r1", "worker", "proof1", true).is_err());
+        append_review_once(&mut journal, "r2", "worker", "proof2", false).unwrap();
+        assert_eq!(replay_review_score(&journal, "worker").unwrap(), 0);
     }
 
     #[test]
