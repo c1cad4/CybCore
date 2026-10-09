@@ -77,6 +77,30 @@ pub fn verify_checkpoint(
     Ok(())
 }
 
+
+/// A trusted witness can reject an older checkpoint even when its signature
+/// remains valid. The witness counter must be stored independently.
+pub fn verify_checkpoint_freshness(
+    checkpoint: &Checkpoint,
+    minimum_count: u64,
+) -> Result<(), &'static str> {
+    if checkpoint.count < minimum_count {
+        return Err("checkpoint rollback detected");
+    }
+    Ok(())
+}
+
+/// Validate a checkpoint and enforce the latest externally witnessed count.
+pub fn verify_witnessed_checkpoint(
+    journal: &Journal,
+    registry: &Registry,
+    checkpoint: &Checkpoint,
+    minimum_count: u64,
+) -> Result<(), &'static str> {
+    verify_checkpoint(journal, registry, checkpoint)?;
+    verify_checkpoint_freshness(checkpoint, minimum_count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,6 +165,17 @@ mod tests {
         verify_checkpoint(&recovered, &registry, &checkpoint).unwrap();
         std::fs::remove_file(&path).unwrap();
         std::fs::remove_file(path.with_extension("cyblock")).unwrap();
+    }
+
+    #[test]
+    fn witnessed_count_rejects_valid_old_checkpoint() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let mut old = Journal::default();
+        old.append("mission", "m1").unwrap();
+        let old_checkpoint = sign_checkpoint(&old, "auditor", &identity);
+        verify_checkpoint(&old, &registry, &old_checkpoint).unwrap();
+        assert!(verify_witnessed_checkpoint(&old, &registry, &old_checkpoint, 2).is_err());
     }
 
     #[test]
