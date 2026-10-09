@@ -1,0 +1,20 @@
+{
+  "repositories": [
+    {
+      "name": "CybAgents",
+      "commit": "71084e29442b6c8a161ca74e1d9cad834f0c3026"
+    },
+    {
+      "name": "CybRegistry",
+      "commit": "c3fad6ab47706370602dad21b3fd062889dd4547"
+    },
+    {
+      "name": "CybMemory",
+      "commit": "ed7800fb13c2be63de22905021d57a1eb28d9199"
+    },
+    {
+      "name": "CybSwarm",
+      "commit": "0dd6b2128c91e43ec254b3f4bb11e13029b54576"
+    }
+  ]
+}
