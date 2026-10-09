@@ -372,6 +372,33 @@ mod tests {
     }
 
     #[test]
+    fn recovery_rejects_stale_checkpoint_and_missing_witness() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let journal_path =
+            std::env::temp_dir().join(format!("cybcore-recover-{}.bin", std::process::id()));
+        let witness_path =
+            std::env::temp_dir().join(format!("cybcore-recover-witness-{}.bin", std::process::id()));
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let old = sign_checkpoint(&journal, "auditor", &identity);
+        cybmemory::save_checked_locked(&journal, &journal_path).unwrap();
+        assert!(recover_witnessed_journal(&journal_path, &witness_path, &registry, &old).is_err());
+        observe_witness_locked(&witness_path, &journal, &registry, &old).unwrap();
+        recover_witnessed_journal(&journal_path, &witness_path, &registry, &old).unwrap();
+        journal.append("review", "r2").unwrap();
+        let latest = sign_checkpoint(&journal, "auditor", &identity);
+        cybmemory::save_checked_locked(&journal, &journal_path).unwrap();
+        observe_witness_locked(&witness_path, &journal, &registry, &latest).unwrap();
+        assert!(recover_witnessed_journal(&journal_path, &witness_path, &registry, &old).is_err());
+        recover_witnessed_journal(&journal_path, &witness_path, &registry, &latest).unwrap();
+        std::fs::remove_file(&journal_path).unwrap();
+        std::fs::remove_file(journal_path.with_extension("cyblock")).unwrap();
+        std::fs::remove_file(&witness_path).unwrap();
+        std::fs::remove_file(witness_path.with_extension("cybwlock")).unwrap();
+    }
+
+    #[test]
     fn rejects_unauthorized_signer() {
         let identity = Identity::generate();
         let registry = Registry::default();
