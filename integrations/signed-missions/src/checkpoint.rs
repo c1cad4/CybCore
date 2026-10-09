@@ -184,7 +184,6 @@ pub fn load_witness(path: &std::path::Path) -> std::io::Result<Witness> {
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
 }
 
-
 /// Hold an exclusive OS advisory lock across the complete witness read,
 /// verified monotonic update and atomic replacement.
 pub fn observe_witness_locked(
@@ -217,7 +216,6 @@ pub fn observe_witness_locked(
     result
 }
 
-
 /// Load a journal and require its externally witnessed watermark to match.
 /// A missing witness is an error: never silently trust a fresh empty watermark.
 pub fn recover_witnessed_journal(
@@ -231,9 +229,7 @@ pub fn recover_witnessed_journal(
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     let witness = load_witness(witness_path)?;
     match witness.latest() {
-        Some((count, digest))
-            if checkpoint.count == count && checkpoint.digest == digest =>
-        {
+        Some((count, digest)) if checkpoint.count == count && checkpoint.digest == digest => {
             Ok(journal)
         }
         _ => Err(std::io::Error::new(
