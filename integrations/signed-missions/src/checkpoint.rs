@@ -626,6 +626,62 @@ mod tests {
     }
 
     #[test]
+    fn interrupted_intent_can_be_finalized() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let base = std::env::temp_dir().join(format!("cybcore-intent-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let journal_path = base.join("journal.bin");
+        let witness_path = base.join("witness.bin");
+        let pending_path = base.join("pending.bin");
+        let lock_path = base.join("transaction.lock");
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
+        std::fs::write(&pending_path, encode_pending_checkpoint(&checkpoint)).unwrap();
+        cybmemory::save_checked_locked(&journal, &journal_path).unwrap();
+        finalize_pending_checkpoint(
+            &lock_path,
+            &journal_path,
+            &witness_path,
+            &pending_path,
+            &registry,
+        )
+        .unwrap();
+        assert!(!pending_path.exists());
+        recover_witnessed_journal(&journal_path, &witness_path, &registry, &checkpoint).unwrap();
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn interrupted_intent_rejects_mismatched_journal() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let base = std::env::temp_dir().join(format!("cybcore-intent-bad-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let journal_path = base.join("journal.bin");
+        let witness_path = base.join("witness.bin");
+        let pending_path = base.join("pending.bin");
+        let lock_path = base.join("transaction.lock");
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
+        std::fs::write(&pending_path, encode_pending_checkpoint(&checkpoint)).unwrap();
+        journal.append("review", "unexpected").unwrap();
+        cybmemory::save_checked_locked(&journal, &journal_path).unwrap();
+        assert!(finalize_pending_checkpoint(
+            &lock_path,
+            &journal_path,
+            &witness_path,
+            &pending_path,
+            &registry,
+        )
+        .is_err());
+        assert!(pending_path.exists());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn rejects_unauthorized_signer() {
         let identity = Identity::generate();
         let registry = Registry::default();
