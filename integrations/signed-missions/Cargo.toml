@@ -10,3 +10,4 @@ cybmissions = { git = "https://github.com/c1cad4/CybMissions", branch = "feat/mi
 cybtrust = { git = "https://github.com/c1cad4/CybTrust", branch = "feat/evidence-reputation" }
 cybgrowth = { git = "https://github.com/c1cad4/CybGrowth", branch = "feat/contribution-ledger" }
 cybregistry = { git = "https://github.com/c1cad4/CybRegistry", branch = "feat/agent-directory-v1" }
+cybmemory = { git = "https://github.com/c1cad4/CybMemory", branch = "feat/journal-v1" }
