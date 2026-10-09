@@ -217,6 +217,32 @@ pub fn observe_witness_locked(
     result
 }
 
+
+/// Load a journal and require its externally witnessed watermark to match.
+/// A missing witness is an error: never silently trust a fresh empty watermark.
+pub fn recover_witnessed_journal(
+    journal_path: &std::path::Path,
+    witness_path: &std::path::Path,
+    registry: &Registry,
+    checkpoint: &Checkpoint,
+) -> std::io::Result<Journal> {
+    let journal = cybmemory::load_checked_locked(journal_path)?;
+    verify_checkpoint(&journal, registry, checkpoint)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    let witness = load_witness(witness_path)?;
+    match witness.latest() {
+        Some((count, digest))
+            if checkpoint.count == count && checkpoint.digest == digest =>
+        {
+            Ok(journal)
+        }
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "journal differs from witnessed state",
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
