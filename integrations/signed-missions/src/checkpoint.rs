@@ -239,6 +239,57 @@ pub fn recover_witnessed_journal(
     }
 }
 
+
+/// Coordinate cooperative writers across journal and witness files.
+/// The lock covers the complete critical section, including recovery checks.
+pub fn with_audit_transaction_lock<T>(
+    lock_path: &std::path::Path,
+    action: impl FnOnce() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    use fs2::FileExt;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)?;
+    file.lock_exclusive()?;
+    let result = action();
+    FileExt::unlock(&file)?;
+    result
+}
+
+/// Commit a prepared journal and matching checkpoint while coordinating
+/// cooperative writers. An interrupted commit must be reconciled explicitly.
+pub fn commit_witnessed_journal(
+    lock_path: &std::path::Path,
+    journal_path: &std::path::Path,
+    witness_path: &std::path::Path,
+    journal: &Journal,
+    registry: &Registry,
+    checkpoint: &Checkpoint,
+) -> std::io::Result<()> {
+    with_audit_transaction_lock(lock_path, || {
+        verify_checkpoint(journal, registry, checkpoint)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        if witness_path.exists() {
+            let previous = load_witness(witness_path)?;
+            if let Some((count, digest)) = previous.latest() {
+                if checkpoint.count < count
+                    || (checkpoint.count == count && checkpoint.digest != digest)
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "witness rollback or fork",
+                    ));
+                }
+            }
+        }
+        cybmemory::save_checked_locked(journal, journal_path)?;
+        observe_witness_locked(witness_path, journal, registry, checkpoint)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
