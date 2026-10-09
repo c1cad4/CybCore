@@ -1,0 +1,11 @@
+[package]
+name = "cybcore-agent-pipeline"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+cybagents = { git = "https://github.com/c1cad4/CybAgents", branch = "feat/bounded-agent-runtime" }
+cybswarm = { git = "https://github.com/c1cad4/CybSwarm", branch = "feat/swarm-coordinator" }
+cybbrain = { git = "https://github.com/c1cad4/CybBrain", branch = "feat/evidence-memory" }
+cybmemory = { git = "https://github.com/c1cad4/CybMemory", branch = "feat/journal-v1" }
