@@ -377,8 +377,10 @@ mod tests {
         let registry = registry_for(&identity);
         let journal_path =
             std::env::temp_dir().join(format!("cybcore-recover-{}.bin", std::process::id()));
-        let witness_path =
-            std::env::temp_dir().join(format!("cybcore-recover-witness-{}.bin", std::process::id()));
+        let witness_path = std::env::temp_dir().join(format!(
+            "cybcore-recover-witness-{}.bin",
+            std::process::id()
+        ));
         let mut journal = Journal::default();
         journal.append("mission", "m1").unwrap();
         let old = sign_checkpoint(&journal, "auditor", &identity);
