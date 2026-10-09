@@ -452,6 +452,44 @@ mod tests {
     }
 
     #[test]
+    fn transaction_commit_and_recovery_roundtrip() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let base = std::env::temp_dir().join(format!("cybcore-txn-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let journal_path = base.join("journal.bin");
+        let witness_path = base.join("witness.bin");
+        let transaction_lock = base.join("transaction.lock");
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let first = sign_checkpoint(&journal, "auditor", &identity);
+        commit_witnessed_journal(
+            &transaction_lock,
+            &journal_path,
+            &witness_path,
+            &journal,
+            &registry,
+            &first,
+        )
+        .unwrap();
+        recover_witnessed_journal(&journal_path, &witness_path, &registry, &first).unwrap();
+        journal.append("review", "r2").unwrap();
+        let second = sign_checkpoint(&journal, "auditor", &identity);
+        commit_witnessed_journal(
+            &transaction_lock,
+            &journal_path,
+            &witness_path,
+            &journal,
+            &registry,
+            &second,
+        )
+        .unwrap();
+        assert!(recover_witnessed_journal(&journal_path, &witness_path, &registry, &first).is_err());
+        recover_witnessed_journal(&journal_path, &witness_path, &registry, &second).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
     fn rejects_unauthorized_signer() {
         let identity = Identity::generate();
         let registry = Registry::default();
