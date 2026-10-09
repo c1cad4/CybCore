@@ -123,6 +123,25 @@ mod tests {
     }
 
     #[test]
+    fn checked_disk_recovery_with_external_checkpoint() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        journal.append("signed_review", "r1").unwrap();
+        let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
+        let path = std::env::temp_dir().join(format!(
+            "cybcore-checkpoint-{}.bin",
+            std::process::id()
+        ));
+        cybmemory::save_checked_locked(&journal, &path).unwrap();
+        let recovered = cybmemory::load_checked_locked(&path).unwrap();
+        verify_checkpoint(&recovered, &registry, &checkpoint).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(path.with_extension("cyblock")).unwrap();
+    }
+
+    #[test]
     fn rejects_unauthorized_signer() {
         let identity = Identity::generate();
         let registry = Registry::default();
