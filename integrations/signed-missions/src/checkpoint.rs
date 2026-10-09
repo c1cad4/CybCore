@@ -77,7 +77,6 @@ pub fn verify_checkpoint(
     Ok(())
 }
 
-
 /// A trusted witness can reject an older checkpoint even when its signature
 /// remains valid. The witness counter must be stored independently.
 pub fn verify_checkpoint_freshness(
@@ -100,7 +99,6 @@ pub fn verify_witnessed_checkpoint(
     verify_checkpoint(journal, registry, checkpoint)?;
     verify_checkpoint_freshness(checkpoint, minimum_count)
 }
-
 
 /// A witness stores the latest count and digest outside the audited journal.
 /// Updates require a verified, authorized checkpoint and never decrease count.
