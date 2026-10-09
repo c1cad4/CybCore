@@ -107,7 +107,6 @@ pub fn persist_signed_mission_audit(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-
 /// Rebuild a score from journaled review events.
 /// Each event id is counted once; malformed entries fail closed.
 /// The journal is assumed to have passed integrity checks before replay.
@@ -115,7 +114,11 @@ pub fn replay_review_score(journal: &Journal, subject: &str) -> Result<i64, Stri
     use std::collections::HashSet;
     let mut seen = HashSet::new();
     let mut score = 0i64;
-    for entry in journal.entries().iter().filter(|entry| entry.kind == "review_event") {
+    for entry in journal
+        .entries()
+        .iter()
+        .filter(|entry| entry.kind == "review_event")
+    {
         let fields: Vec<&str> = entry.payload.split('|').collect();
         if fields.len() != 4 || fields.iter().any(|value| value.is_empty()) {
             return Err("invalid review event".into());
@@ -148,7 +151,11 @@ pub fn append_review_once(
     {
         return Err("invalid review field".into());
     }
-    for entry in journal.entries().iter().filter(|entry| entry.kind == "review_event") {
+    for entry in journal
+        .entries()
+        .iter()
+        .filter(|entry| entry.kind == "review_event")
+    {
         if entry.payload.split('|').next() == Some(event_id) {
             return Err("duplicate review event".into());
         }
