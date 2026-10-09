@@ -29,7 +29,6 @@ pub fn authorized_review(
     })
 }
 
-
 /// Signed, domain-separated review record with an authenticated reviewer.
 /// Replay protection still requires a unique event id in the journal.
 pub fn signed_review_message(
