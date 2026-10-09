@@ -239,7 +239,6 @@ pub fn recover_witnessed_journal(
     }
 }
 
-
 /// Coordinate cooperative writers across journal and witness files.
 /// The lock covers the complete critical section, including recovery checks.
 pub fn with_audit_transaction_lock<T>(
@@ -484,7 +483,9 @@ mod tests {
             &second,
         )
         .unwrap();
-        assert!(recover_witnessed_journal(&journal_path, &witness_path, &registry, &first).is_err());
+        assert!(
+            recover_witnessed_journal(&journal_path, &witness_path, &registry, &first).is_err()
+        );
         recover_witnessed_journal(&journal_path, &witness_path, &registry, &second).unwrap();
         std::fs::remove_dir_all(&base).unwrap();
     }
