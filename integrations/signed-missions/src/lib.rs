@@ -153,6 +153,26 @@ pub fn verify_signed_review_history(journal: &Journal, registry: &Registry) -> R
     Ok(())
 }
 
+
+/// Compute a deterministic SHA-256 commitment to the ordered journal entries.
+/// Keep the returned digest in a separate trusted store to detect deletion or reordering.
+pub fn journal_commitment(journal: &Journal) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"cybcore.journal.v1");
+    for entry in journal.entries() {
+        for value in [entry.kind.as_bytes(), entry.payload.as_bytes()] {
+            hash.update((value.len() as u64).to_be_bytes());
+            hash.update(value);
+        }
+    }
+    hash.finalize().into()
+}
+
+pub fn verify_journal_commitment(journal: &Journal, expected: &[u8; 32]) -> bool {
+    &journal_commitment(journal) == expected
+}
+
 pub fn signed_mission_demo() -> Result<(i64, usize), String> {
     let reviewer = Identity::generate();
     let mut registry = Registry::default();
@@ -406,6 +426,19 @@ mod tests {
             &signature,
         )
         .is_err());
+    }
+
+    #[test]
+    fn journal_commitment_detects_reordering() {
+        let mut first = Journal::default();
+        first.append("a", "1").unwrap();
+        first.append("b", "2").unwrap();
+        let commitment = journal_commitment(&first);
+        assert!(verify_journal_commitment(&first, &commitment));
+        let mut reordered = Journal::default();
+        reordered.append("b", "2").unwrap();
+        reordered.append("a", "1").unwrap();
+        assert!(!verify_journal_commitment(&reordered, &commitment));
     }
 
     #[test]
