@@ -396,6 +396,24 @@ pub fn commit_witnessed_journal_with_intent(
     })
 }
 
+/// Resolve an interrupted commit only if its signed intent exactly matches
+/// the journal on disk and does not roll back the independently stored witness.
+/// The caller must hold the same transaction lock used by the writer.
+pub fn finalize_pending_checkpoint(
+    transaction_lock: &std::path::Path,
+    journal_path: &std::path::Path,
+    witness_path: &std::path::Path,
+    pending_path: &std::path::Path,
+    registry: &Registry,
+) -> std::io::Result<()> {
+    with_audit_transaction_lock(transaction_lock, || {
+        let checkpoint = recover_pending_checkpoint(pending_path, journal_path, registry)?;
+        let journal = cybmemory::load_checked_locked(journal_path)?;
+        observe_witness_locked(witness_path, &journal, registry, &checkpoint)?;
+        std::fs::remove_file(pending_path)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
