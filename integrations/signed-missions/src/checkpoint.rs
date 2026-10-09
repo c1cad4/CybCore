@@ -184,6 +184,39 @@ pub fn load_witness(path: &std::path::Path) -> std::io::Result<Witness> {
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
 }
 
+
+/// Hold an exclusive OS advisory lock across the complete witness read,
+/// verified monotonic update and atomic replacement.
+pub fn observe_witness_locked(
+    witness_path: &std::path::Path,
+    journal: &Journal,
+    registry: &Registry,
+    checkpoint: &Checkpoint,
+) -> std::io::Result<()> {
+    use fs2::FileExt;
+    let lock_path = witness_path.with_extension("cybwlock");
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)?;
+    lock.lock_exclusive()?;
+    let result = (|| {
+        let mut witness = match load_witness(witness_path) {
+            Ok(witness) => witness,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Witness::default(),
+            Err(error) => return Err(error),
+        };
+        witness
+            .observe(journal, registry, checkpoint)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        save_witness(&witness, witness_path)
+    })();
+    FileExt::unlock(&lock)?;
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,6 +327,26 @@ mod tests {
         let encoded = encode_witness(&witness);
         assert_eq!(decode_witness(&encoded).unwrap().latest(), witness.latest());
         assert!(decode_witness(&encoded[..encoded.len() - 1]).is_err());
+    }
+
+    #[test]
+    fn locked_witness_rejects_stale_update_after_restart() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let path = std::env::temp_dir().join(format!("cybcore-witness-{}.bin", std::process::id()));
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let old = sign_checkpoint(&journal, "auditor", &identity);
+        observe_witness_locked(&path, &journal, &registry, &old).unwrap();
+        journal.append("review", "r1").unwrap();
+        let newest = sign_checkpoint(&journal, "auditor", &identity);
+        observe_witness_locked(&path, &journal, &registry, &newest).unwrap();
+        let mut previous = Journal::default();
+        previous.append("mission", "m1").unwrap();
+        assert!(observe_witness_locked(&path, &previous, &registry, &old).is_err());
+        assert_eq!(load_witness(&path).unwrap().latest().unwrap().0, 2);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(path.with_extension("cybwlock")).unwrap();
     }
 
     #[test]
