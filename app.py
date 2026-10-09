@@ -50,12 +50,17 @@ class Question(BaseModel):
 def create_app(database=None, model_client=None):
     app = FastAPI(title='CybCore', version='0.1.0')
     memory = Memory(database or os.environ.get('CYBCORE_DATABASE', str(ROOT / '.onboarding/cybcore/knowledge.sqlite3')))
-    registry = Registry()
-    registry.register(Agent('keeper', tuple(sorted(CAPABILITIES))))
+    registry = Registry(memory.path, Agent)
+    for builtin in (Agent('keeper', tuple(sorted(CAPABILITIES))), Agent('advisor', ('memory.recall',))):
+        try:
+            registry.register(builtin)
+        except ValueError:
+            stored = registry.get(builtin.id)
+            if stored.capabilities != builtin.capabilities:
+                raise ValueError('builtin agent permissions do not match')
     swarm = Swarm(registry, memory)
-    registry.register(Agent('advisor', ('memory.recall',)))
     model = model_client or LocalModel(os.environ.get('CYBMODEL_URL', 'http://127.0.0.1:8080/v1'),
-                                      os.environ.get('CYBMODEL_NAME', ''), float(os.environ.get('CYBMODEL_TIMEOUT', '8')))
+                                      os.environ.get('CYBMODEL_NAME', ''), float(os.environ.get('CYBMODEL_TIMEOUT', '30')))
     advisor = Advisor(registry.get('advisor'), memory, model)
     @app.get('/model')
     def model_status():

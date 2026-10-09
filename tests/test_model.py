@@ -25,6 +25,7 @@ def server(mode='ok'):
             elif mode=='oversized':self.respond({'choices':[{'message':{'content':'x'*70000}}]})
             elif mode=='reasoning':self.respond({'choices':[{'message':{'reasoning':'internal reasoning'}}]})
             elif mode=='malformed':self.respond({'choices':None})
+            elif mode=='truncated':self.respond({'choices':[{'message':{'content':'incomplete'},'finish_reason':'length'}]})
             else:self.respond({'choices':[{'message':{'content':'Ответ протокольной фикстуры'}}]})
         def respond(self,body,status=200):
             data=json.dumps(body,ensure_ascii=False).encode()
@@ -46,6 +47,7 @@ class ModelTests(unittest.TestCase):
             result=model.answer('Вопрос',[{'source':'field log','content':'data'}])
             self.assertEqual(result['model'],'fixture-model')
             self.assertFalse(captured[0]['stream'])
+            self.assertEqual(captured[0]['chat_template_kwargs'], {'enable_thinking': False})
             self.assertEqual(json.loads(captured[0]['messages'][1]['content'])['knowledge'][0]['source'],'field log')
     def test_unloaded_or_invalid_model_is_offline(self):
         for mode in ['empty-models','bad-models']:
@@ -55,7 +57,7 @@ class ModelTests(unittest.TestCase):
         with server() as (model,_):
             model.model='not-loaded';self.assertEqual(model.status()['status'],'offline')
     def test_invalid_answers_fail(self):
-        for mode in ['error','oversized','reasoning','malformed']:
+        for mode in ['error','oversized','reasoning','malformed','truncated']:
             with self.subTest(mode=mode),server(mode) as (model,_):
                 with self.assertRaises(ModelUnavailable):model.answer('question',[])
     def test_grounding_does_not_write_answer_to_memory(self):

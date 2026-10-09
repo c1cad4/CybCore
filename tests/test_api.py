@@ -35,6 +35,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.task(command='echo test').status_code,422)
     def test_duplicate_registration(self):
         self.assertEqual(self.client.post('/agents',json={'id':'keeper','capabilities':['memory.recall']}).status_code,409)
+    def test_user_agent_and_permissions_survive_restart(self):
+        response = self.client.post('/agents',json={'id':'reader','capabilities':['memory.recall']})
+        self.assertEqual(response.status_code,201)
+        with TestClient(create_app(self.database)) as restarted:
+            agents = restarted.get('/agents').json()
+            self.assertEqual(next(a for a in agents if a['id']=='reader')['capabilities'],['memory.recall'])
+            denied = restarted.post('/tasks',json={'task_id':'denied-after-restart','agent_ids':['reader'],'capability':'memory.remember','content':'must not be saved','source':'test'})
+            self.assertEqual(denied.status_code,400)
+            recall = restarted.post('/tasks',json={'task_id':'recall-after-restart','agent_ids':['reader'],'capability':'memory.recall','query':'saved'})
+            self.assertEqual(recall.status_code,200)
+            self.assertEqual(recall.json()['events'][0]['result'],[])
     def test_ui_and_health(self):
         self.assertEqual(self.client.get('/health').json()['status'],'ok')
         self.assertIn('Память',self.client.get('/').text)
