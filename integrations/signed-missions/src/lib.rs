@@ -1,3 +1,5 @@
+pub mod checkpoint;
+
 use cybgrowth::{Contribution, GrowthLedger};
 use cybidentity::{verify, Identity};
 use cybmemory::Journal;
