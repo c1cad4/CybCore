@@ -7,10 +7,11 @@ from typing import Literal
 ROOT = Path(__file__).resolve().parent.parent
 for repo in ('CybAgents', 'CybRegistry', 'CybMemory', 'CybSwarm'):
     sys.path.insert(0, str(ROOT / repo))
-from cybagents import Agent, CAPABILITIES
+from cybagents import Agent, Advisor, CAPABILITIES
 from cybregistry import Registry
 from cybmemory import Memory, Conflict
 from cybswarm import Swarm
+from local_model import LocalModel, ModelUnavailable
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -36,12 +37,36 @@ class Task(BaseModel):
             raise ValueError('query required')
         return self
 
-def create_app(database=None):
+class Question(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    question: str = Field(min_length=1, max_length=4000)
+    knowledge_query: str = Field(min_length=1, max_length=256)
+    @model_validator(mode='after')
+    def nonempty(self):
+        if not self.question.strip() or not self.knowledge_query.strip():
+            raise ValueError('question and knowledge_query required')
+        return self
+
+def create_app(database=None, model_client=None):
     app = FastAPI(title='CybCore', version='0.1.0')
     memory = Memory(database or os.environ.get('CYBCORE_DATABASE', str(ROOT / '.onboarding/cybcore/knowledge.sqlite3')))
     registry = Registry()
     registry.register(Agent('keeper', tuple(sorted(CAPABILITIES))))
     swarm = Swarm(registry, memory)
+    registry.register(Agent('advisor', ('memory.recall',)))
+    model = model_client or LocalModel(os.environ.get('CYBMODEL_URL', 'http://127.0.0.1:8080/v1'),
+                                      os.environ.get('CYBMODEL_NAME', ''), float(os.environ.get('CYBMODEL_TIMEOUT', '8')))
+    advisor = Advisor(registry.get('advisor'), memory, model)
+    @app.get('/model')
+    def model_status():
+        return model.status()
+    @app.post('/ask')
+    def ask(body: Question):
+        try:
+            return advisor.answer(body.question, body.knowledge_query)
+        except ModelUnavailable as error:
+            raise HTTPException(503, 'Локальная модель недоступна или вернула некорректный ответ.') from error
+
     @app.get('/')
     def home():
         return FileResponse(Path(__file__).parent / 'web/index.html')

@@ -5,9 +5,9 @@ Applies to the whole repository. Follow more specific subtree instructions when 
 ## Scope
 
 - CybCore owns a local FastAPI HTTP API and browser UI joining CybAgents, CybRegistry, CybMemory and CybSwarm.
-- app.py defines request validation and endpoints; run.py binds the development server; web/index.html owns the UI.
+- app.py defines request validation and endpoints; run.py binds the development server; web/index.html owns the UI; local_model.py implements the optional model adapter.
 - Keep component behavior in its owning sibling repository; read components.lock.json for pinned revisions.
-- This prototype saves and searches knowledge without a model LLM. User agent registrations are process-local; knowledge and completed task results persist in SQLite.
+- This prototype saves and searches knowledge without requiring an LLM; an optional loopback model supports source-backed answers. User agent registrations are process-local; knowledge and completed task results persist in SQLite.
 
 ## Setup and checks
 
@@ -25,6 +25,7 @@ Applies to the whole repository. Follow more specific subtree instructions when 
 - Keep the server loopback-only; public multi-user deployment requires a separate authenticated design.
 - Preserve task idempotency: the same task_id and payload returns the stored result; a changed payload returns 409.
 - Validate the whole requested agent team before writing memory; denied capabilities must not produce partial writes.
+- Keep /ask model access bounded and loopback-only; return 503 on model failure, and do not store answers automatically.
 - Preserve source provenance and reject undeclared request fields and capabilities.
 - Do not describe recorded knowledge as model reasoning or hardware observations without evidence.
 - Do not reset existing sibling working trees. Publish component commits before updating integration pins.
