@@ -63,7 +63,6 @@ pub fn append_authorized_review(
     append_review_once(journal, event_id, subject, evidence_id, accepted)
 }
 
-
 /// Encode a signed review in a journal entry. The registered reviewer key
 /// must be available when the journal is replayed.
 pub fn append_signed_review(
@@ -91,14 +90,14 @@ pub fn append_signed_review(
     {
         return Err("invalid signed review field".into());
     }
-    if journal
-        .entries()
-        .iter()
-        .any(|entry| entry.kind == "signed_review" && entry.payload.split('|').next() == Some(event_id))
-    {
+    if journal.entries().iter().any(|entry| {
+        entry.kind == "signed_review" && entry.payload.split('|').next() == Some(event_id)
+    }) {
         return Err("duplicate signed review".into());
     }
-    journal.append("signed_review", &encoded).map_err(str::to_owned)?;
+    journal
+        .append("signed_review", &encoded)
+        .map_err(str::to_owned)?;
     Ok(())
 }
 
@@ -116,7 +115,11 @@ fn hex_signature(signature: &[u8; 64]) -> String {
 /// Rejects duplicates, malformed entries and invalid signatures.
 pub fn verify_signed_review_history(journal: &Journal, registry: &Registry) -> Result<(), String> {
     let mut seen = std::collections::HashSet::new();
-    for entry in journal.entries().iter().filter(|entry| entry.kind == "signed_review") {
+    for entry in journal
+        .entries()
+        .iter()
+        .filter(|entry| entry.kind == "signed_review")
+    {
         let fields: Vec<&str> = entry.payload.split('|').collect();
         if fields.len() != 6 || !seen.insert(fields[0]) {
             return Err("malformed or duplicate signed review".into());
