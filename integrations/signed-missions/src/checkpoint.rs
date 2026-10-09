@@ -101,6 +101,39 @@ pub fn verify_witnessed_checkpoint(
     verify_checkpoint_freshness(checkpoint, minimum_count)
 }
 
+
+/// A witness stores the latest count and digest outside the audited journal.
+/// Updates require a verified, authorized checkpoint and never decrease count.
+#[derive(Debug, Clone, Default)]
+pub struct Witness {
+    latest: Option<(u64, [u8; 32])>,
+}
+
+impl Witness {
+    pub fn observe(
+        &mut self,
+        journal: &Journal,
+        registry: &Registry,
+        checkpoint: &Checkpoint,
+    ) -> Result<(), &'static str> {
+        verify_checkpoint(journal, registry, checkpoint)?;
+        if let Some((count, digest)) = self.latest {
+            if checkpoint.count < count {
+                return Err("witness rollback detected");
+            }
+            if checkpoint.count == count && checkpoint.digest != digest {
+                return Err("witness equivocation detected");
+            }
+        }
+        self.latest = Some((checkpoint.count, checkpoint.digest));
+        Ok(())
+    }
+
+    pub fn latest(&self) -> Option<(u64, [u8; 32])> {
+        self.latest
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,6 +209,27 @@ mod tests {
         let old_checkpoint = sign_checkpoint(&old, "auditor", &identity);
         verify_checkpoint(&old, &registry, &old_checkpoint).unwrap();
         assert!(verify_witnessed_checkpoint(&old, &registry, &old_checkpoint, 2).is_err());
+    }
+
+    #[test]
+    fn witness_rejects_fork_and_rollback() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let mut witness = Witness::default();
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let first = sign_checkpoint(&journal, "auditor", &identity);
+        witness.observe(&journal, &registry, &first).unwrap();
+        let mut fork = Journal::default();
+        fork.append("mission", "different").unwrap();
+        let fork_checkpoint = sign_checkpoint(&fork, "auditor", &identity);
+        assert!(witness.observe(&fork, &registry, &fork_checkpoint).is_err());
+        journal.append("review", "r1").unwrap();
+        let second = sign_checkpoint(&journal, "auditor", &identity);
+        witness.observe(&journal, &registry, &second).unwrap();
+        let mut old = Journal::default();
+        old.append("mission", "m1").unwrap();
+        assert!(witness.observe(&old, &registry, &first).is_err());
     }
 
     #[test]
