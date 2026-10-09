@@ -289,7 +289,6 @@ pub fn commit_witnessed_journal(
     })
 }
 
-
 /// A recoverable intent record: on restart, either finalize the prepared
 /// signed checkpoint or refuse an ambiguous state.
 pub fn encode_pending_checkpoint(checkpoint: &Checkpoint) -> Vec<u8> {
@@ -308,7 +307,9 @@ pub fn decode_pending_checkpoint(bytes: &[u8]) -> Result<Checkpoint, &'static st
         return Err("invalid pending checkpoint");
     }
     let length = u64::from_be_bytes(
-        bytes[8..16].try_into().map_err(|_| "invalid reviewer length")?,
+        bytes[8..16]
+            .try_into()
+            .map_err(|_| "invalid reviewer length")?,
     );
     let length = usize::try_from(length).map_err(|_| "reviewer too long")?;
     if length > 1024 || bytes.len() != 120 + length {
@@ -318,7 +319,9 @@ pub fn decode_pending_checkpoint(bytes: &[u8]) -> Result<Checkpoint, &'static st
         .map_err(|_| "invalid reviewer encoding")?;
     let offset = 16 + length;
     let count = u64::from_be_bytes(
-        bytes[offset..offset + 8].try_into().map_err(|_| "invalid count")?,
+        bytes[offset..offset + 8]
+            .try_into()
+            .map_err(|_| "invalid count")?,
     );
     let mut digest = [0u8; 32];
     digest.copy_from_slice(&bytes[offset + 8..offset + 40]);
@@ -346,7 +349,6 @@ pub fn recover_pending_checkpoint(
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     Ok(checkpoint)
 }
-
 
 /// Commit with a durable pending checkpoint marker. A crash after writing
 /// the marker can be inspected with recover_pending_checkpoint.
