@@ -82,18 +82,25 @@ pub fn signed_mission_demo() -> Result<(i64, usize), String> {
     Ok((trust.score("worker"), growth.completed_missions("worker")))
 }
 
-
 /// Write an audit journal and reopen it to verify the encoded records.
 /// This is not atomic, authenticated, or crash-safe persistence.
 pub fn persist_signed_mission_audit(path: &Path) -> Result<(), String> {
     let (score, missions) = signed_mission_demo()?;
     let mut journal = Journal::default();
-    journal.append("mission", "m1:completed:proof1").map_err(str::to_owned)?;
-    journal.append("review", "r1:reviewer:accepted").map_err(str::to_owned)?;
-    journal.append("trust", &format!("worker:{score}")).map_err(str::to_owned)?;
-    journal.append("growth", &format!("worker:{missions}")).map_err(str::to_owned)?;
-    cybmemory::save(&journal, path).map_err(|e| e.to_string())?;
-    let loaded = cybmemory::load(path).map_err(|e| e.to_string())?;
+    journal
+        .append("mission", "m1:completed:proof1")
+        .map_err(str::to_owned)?;
+    journal
+        .append("review", "r1:reviewer:accepted")
+        .map_err(str::to_owned)?;
+    journal
+        .append("trust", &format!("worker:{score}"))
+        .map_err(str::to_owned)?;
+    journal
+        .append("growth", &format!("worker:{missions}"))
+        .map_err(str::to_owned)?;
+    cybmemory::save_checked(&journal, path).map_err(|e| e.to_string())?;
+    let loaded = cybmemory::load_checked(path).map_err(|e| e.to_string())?;
     if loaded.entries() != journal.entries() {
         return Err("audit journal mismatch".into());
     }
@@ -129,7 +136,7 @@ mod tests {
             std::process::id()
         ));
         persist_signed_mission_audit(&path).unwrap();
-        let journal = cybmemory::load(&path).unwrap();
+        let journal = cybmemory::load_checked(&path).unwrap();
         assert_eq!(journal.find_kind("mission").len(), 1);
         assert_eq!(journal.find_kind("review").len(), 1);
         assert_eq!(journal.find_kind("trust").len(), 1);
