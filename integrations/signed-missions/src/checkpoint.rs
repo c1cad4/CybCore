@@ -65,7 +65,11 @@ pub fn verify_checkpoint(
     }
     if !verify(
         &reviewer.public_key,
-        &message(&checkpoint.reviewer_id, checkpoint.count, &checkpoint.digest),
+        &message(
+            &checkpoint.reviewer_id,
+            checkpoint.count,
+            &checkpoint.digest,
+        ),
         &checkpoint.signature,
     ) {
         return Err("checkpoint signature invalid");
@@ -130,10 +134,8 @@ mod tests {
         journal.append("mission", "m1").unwrap();
         journal.append("signed_review", "r1").unwrap();
         let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
-        let path = std::env::temp_dir().join(format!(
-            "cybcore-checkpoint-{}.bin",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("cybcore-checkpoint-{}.bin", std::process::id()));
         cybmemory::save_checked_locked(&journal, &path).unwrap();
         let recovered = cybmemory::load_checked_locked(&path).unwrap();
         verify_checkpoint(&recovered, &registry, &checkpoint).unwrap();
