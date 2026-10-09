@@ -12,3 +12,4 @@ cybgrowth = { git = "https://github.com/c1cad4/CybGrowth", branch = "feat/contri
 cybregistry = { git = "https://github.com/c1cad4/CybRegistry", branch = "feat/agent-directory-v1" }
 cybmemory = { git = "https://github.com/c1cad4/CybMemory", branch = "feat/journal-v1" }
 sha2 = "0.10"
+fs2 = "0.4"
