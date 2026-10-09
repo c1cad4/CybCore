@@ -289,6 +289,64 @@ pub fn commit_witnessed_journal(
     })
 }
 
+
+/// A recoverable intent record: on restart, either finalize the prepared
+/// signed checkpoint or refuse an ambiguous state.
+pub fn encode_pending_checkpoint(checkpoint: &Checkpoint) -> Vec<u8> {
+    let mut bytes = b"CYBPEND1".to_vec();
+    let reviewer = checkpoint.reviewer_id.as_bytes();
+    bytes.extend_from_slice(&(reviewer.len() as u64).to_be_bytes());
+    bytes.extend_from_slice(reviewer);
+    bytes.extend_from_slice(&checkpoint.count.to_be_bytes());
+    bytes.extend_from_slice(&checkpoint.digest);
+    bytes.extend_from_slice(&checkpoint.signature);
+    bytes
+}
+
+pub fn decode_pending_checkpoint(bytes: &[u8]) -> Result<Checkpoint, &'static str> {
+    if !bytes.starts_with(b"CYBPEND1") || bytes.len() < 8 + 8 + 8 + 32 + 64 {
+        return Err("invalid pending checkpoint");
+    }
+    let length = u64::from_be_bytes(
+        bytes[8..16].try_into().map_err(|_| "invalid reviewer length")?,
+    );
+    let length = usize::try_from(length).map_err(|_| "reviewer too long")?;
+    if length > 1024 || bytes.len() != 120 + length {
+        return Err("invalid pending length");
+    }
+    let reviewer_id = String::from_utf8(bytes[16..16 + length].to_vec())
+        .map_err(|_| "invalid reviewer encoding")?;
+    let offset = 16 + length;
+    let count = u64::from_be_bytes(
+        bytes[offset..offset + 8].try_into().map_err(|_| "invalid count")?,
+    );
+    let mut digest = [0u8; 32];
+    digest.copy_from_slice(&bytes[offset + 8..offset + 40]);
+    let mut signature = [0u8; 64];
+    signature.copy_from_slice(&bytes[offset + 40..offset + 104]);
+    Ok(Checkpoint {
+        reviewer_id,
+        count,
+        digest,
+        signature,
+    })
+}
+
+/// Read a durable pending intent and verify it against the journal.
+/// Never accept a pending intent merely because its bytes parse.
+pub fn recover_pending_checkpoint(
+    pending_path: &std::path::Path,
+    journal_path: &std::path::Path,
+    registry: &Registry,
+) -> std::io::Result<Checkpoint> {
+    let checkpoint = decode_pending_checkpoint(&std::fs::read(pending_path)?)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    let journal = cybmemory::load_checked_locked(journal_path)?;
+    verify_checkpoint(&journal, registry, &checkpoint)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    Ok(checkpoint)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,6 +546,16 @@ mod tests {
         );
         recover_witnessed_journal(&journal_path, &witness_path, &registry, &second).unwrap();
         std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn pending_checkpoint_codec_roundtrip_and_corruption() {
+        let identity = Identity::generate();
+        let journal = Journal::default();
+        let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
+        let bytes = encode_pending_checkpoint(&checkpoint);
+        assert_eq!(decode_pending_checkpoint(&bytes).unwrap(), checkpoint);
+        assert!(decode_pending_checkpoint(&bytes[..bytes.len() - 1]).is_err());
     }
 
     #[test]
