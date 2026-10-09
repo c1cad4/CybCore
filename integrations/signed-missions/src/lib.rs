@@ -1,6 +1,8 @@
 use cybgrowth::{Contribution, GrowthLedger};
 use cybidentity::{verify, Identity};
 use cybmissions::{MissionBoard, Status};
+use cybregistry::{AgentRecord, Registry};
+use std::collections::BTreeSet;
 use cybtrust::{ReviewEvent, TrustLedger};
 pub fn approval_message(mission: &str, actor: &str, evidence: &str) -> Vec<u8> {
     let mut bytes = b"cybcore.approval.v1".to_vec();
@@ -11,8 +13,30 @@ pub fn approval_message(mission: &str, actor: &str, evidence: &str) -> Vec<u8> {
     bytes
 }
 
+/// Verify the signature against a registered reviewer with approval capability.
+/// The registry itself is assumed trusted and must be provisioned securely.
+pub fn authorized_review(
+    registry: &Registry,
+    reviewer_id: &str,
+    message: &[u8],
+    signature: &[u8; 64],
+) -> bool {
+    registry.get(reviewer_id).is_some_and(|agent| {
+        agent.capabilities.contains("approve_mission")
+            && verify(&agent.public_key, message, signature)
+    })
+}
+
 pub fn signed_mission_demo() -> Result<(i64, usize), String> {
     let reviewer = Identity::generate();
+    let mut registry = Registry::default();
+    registry
+        .register(AgentRecord {
+            id: "reviewer".into(),
+            public_key: reviewer.public_key(),
+            capabilities: BTreeSet::from(["approve_mission".into()]),
+        })
+        .map_err(|e| format!("{e:?}"))?;
     let mut board = MissionBoard::default();
     board
         .create("m1", "Document an observation")
@@ -23,7 +47,7 @@ pub fn signed_mission_demo() -> Result<(i64, usize), String> {
         .map_err(|e| format!("{e:?}"))?;
     let message = approval_message("m1", "worker", "proof1");
     let signature = reviewer.sign(&message);
-    if !verify(&reviewer.public_key(), &message, &signature) {
+    if !authorized_review(&registry, "reviewer", &message, &signature) {
         return Err("signature rejected".into());
     }
     board.approve("m1").map_err(|e| format!("{e:?}"))?;
@@ -63,6 +87,19 @@ mod tests {
     #[test]
     fn signed_mission_updates_ledgers() {
         assert_eq!(signed_mission_demo().unwrap(), (1, 1));
+    }
+
+    #[test]
+    fn unknown_reviewer_is_rejected() {
+        let registry = Registry::default();
+        let signer = Identity::generate();
+        let message = approval_message("m1", "worker", "proof1");
+        assert!(!authorized_review(
+            &registry,
+            "unknown",
+            &message,
+            &signer.sign(&message)
+        ));
     }
 
     #[test]
