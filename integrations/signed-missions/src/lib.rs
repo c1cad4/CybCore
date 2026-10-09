@@ -29,6 +29,41 @@ pub fn authorized_review(
     })
 }
 
+
+/// Signed, domain-separated review record with an authenticated reviewer.
+/// Replay protection still requires a unique event id in the journal.
+pub fn signed_review_message(
+    event_id: &str,
+    subject: &str,
+    evidence_id: &str,
+    accepted: bool,
+) -> Vec<u8> {
+    let mut bytes = b"cybcore.review.v1".to_vec();
+    for value in [event_id, subject, evidence_id] {
+        bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(value.as_bytes());
+    }
+    bytes.push(u8::from(accepted));
+    bytes
+}
+
+pub fn append_authorized_review(
+    journal: &mut Journal,
+    registry: &Registry,
+    reviewer_id: &str,
+    event_id: &str,
+    subject: &str,
+    evidence_id: &str,
+    accepted: bool,
+    signature: &[u8; 64],
+) -> Result<(), String> {
+    let message = signed_review_message(event_id, subject, evidence_id, accepted);
+    if !authorized_review(registry, reviewer_id, &message, signature) {
+        return Err("unauthorized review signature".into());
+    }
+    append_review_once(journal, event_id, subject, evidence_id, accepted)
+}
+
 pub fn signed_mission_demo() -> Result<(i64, usize), String> {
     let reviewer = Identity::generate();
     let mut registry = Registry::default();
@@ -215,6 +250,34 @@ mod tests {
         assert!(append_review_once(&mut journal, "r1", "worker", "proof1", true).is_err());
         append_review_once(&mut journal, "r2", "worker", "proof2", false).unwrap();
         assert_eq!(replay_review_score(&journal, "worker").unwrap(), 0);
+    }
+
+    #[test]
+    fn signed_review_rejects_tampered_decision() {
+        let reviewer = Identity::generate();
+        let mut registry = Registry::default();
+        registry
+            .register(AgentRecord {
+                id: "reviewer".into(),
+                public_key: reviewer.public_key(),
+                capabilities: BTreeSet::from(["approve_mission".into()]),
+            })
+            .unwrap();
+        let message = signed_review_message("r1", "worker", "proof1", true);
+        let signature = reviewer.sign(&message);
+        let mut journal = Journal::default();
+        assert!(append_authorized_review(
+            &mut journal,
+            &registry,
+            "reviewer",
+            "r1",
+            "worker",
+            "proof1",
+            false,
+            &signature,
+        )
+        .is_err());
+        assert!(journal.entries().is_empty());
     }
 
     #[test]
