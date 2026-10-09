@@ -132,6 +132,63 @@ impl Witness {
     }
 }
 
+
+/// Serialize the witness watermark for storage independent of the journal.
+/// A valid signature must still be checked against the current registry.
+pub fn encode_witness(witness: &Witness) -> Vec<u8> {
+    let mut bytes = b"CYBWIT1".to_vec();
+    match witness.latest() {
+        Some((count, digest)) => {
+            bytes.push(1);
+            bytes.extend_from_slice(&count.to_be_bytes());
+            bytes.extend_from_slice(&digest);
+        }
+        None => bytes.push(0),
+    }
+    bytes
+}
+
+pub fn decode_witness(bytes: &[u8]) -> Result<Witness, &'static str> {
+    if !bytes.starts_with(b"CYBWIT1") {
+        return Err("invalid witness header");
+    }
+    match bytes {
+        b"CYBWIT1\\x00" => Ok(Witness::default()),
+        [b'C', b'Y', b'B', b'W', b'I', b'T', b'1', 1, rest @ ..] if rest.len() == 40 => {
+            let mut count_bytes = [0u8; 8];
+            count_bytes.copy_from_slice(&rest[..8]);
+            let mut digest = [0u8; 32];
+            digest.copy_from_slice(&rest[8..]);
+            Ok(Witness {
+                latest: Some((u64::from_be_bytes(count_bytes), digest)),
+            })
+        }
+        _ => Err("invalid witness payload"),
+    }
+}
+
+/// Persist a witness watermark with a temporary file and rename.
+/// Callers must serialize concurrent updates and protect the witness path.
+pub fn save_witness(witness: &Witness, path: &std::path::Path) -> std::io::Result<()> {
+    use std::io::Write;
+    let temporary = path.with_extension("cybwtmp");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&temporary)?;
+    file.write_all(&encode_witness(witness))?;
+    file.sync_all()?;
+    std::fs::rename(temporary, path)
+}
+
+pub fn load_witness(path: &std::path::Path) -> std::io::Result<Witness> {
+    let bytes = std::fs::read(path)?;
+    decode_witness(&bytes).map_err(|error| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,6 +285,20 @@ mod tests {
         let mut old = Journal::default();
         old.append("mission", "m1").unwrap();
         assert!(witness.observe(&old, &registry, &first).is_err());
+    }
+
+    #[test]
+    fn witness_encoding_roundtrip_and_corruption() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
+        let mut witness = Witness::default();
+        witness.observe(&journal, &registry, &checkpoint).unwrap();
+        let encoded = encode_witness(&witness);
+        assert_eq!(decode_witness(&encoded).unwrap().latest(), witness.latest());
+        assert!(decode_witness(&encoded[..encoded.len() - 1]).is_err());
     }
 
     #[test]
