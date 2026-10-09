@@ -63,6 +63,93 @@ pub fn append_authorized_review(
     append_review_once(journal, event_id, subject, evidence_id, accepted)
 }
 
+
+/// Encode a signed review in a journal entry. The registered reviewer key
+/// must be available when the journal is replayed.
+pub fn append_signed_review(
+    journal: &mut Journal,
+    registry: &Registry,
+    reviewer_id: &str,
+    event_id: &str,
+    subject: &str,
+    evidence_id: &str,
+    accepted: bool,
+    signature: &[u8; 64],
+) -> Result<(), String> {
+    let message = signed_review_message(event_id, subject, evidence_id, accepted);
+    if !authorized_review(registry, reviewer_id, &message, signature) {
+        return Err("unauthorized review signature".into());
+    }
+    let decision = if accepted { "accepted" } else { "rejected" };
+    let encoded = format!(
+        "{event_id}|{reviewer_id}|{subject}|{evidence_id}|{decision}|{}",
+        hex_signature(signature)
+    );
+    if [event_id, reviewer_id, subject, evidence_id]
+        .iter()
+        .any(|value| value.is_empty() || value.contains('|'))
+    {
+        return Err("invalid signed review field".into());
+    }
+    if journal
+        .entries()
+        .iter()
+        .any(|entry| entry.kind == "signed_review" && entry.payload.split('|').next() == Some(event_id))
+    {
+        return Err("duplicate signed review".into());
+    }
+    journal.append("signed_review", &encoded).map_err(str::to_owned)?;
+    Ok(())
+}
+
+fn hex_signature(signature: &[u8; 64]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(128);
+    for byte in signature {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 15) as usize] as char);
+    }
+    out
+}
+
+/// Validate all signed review entries against the current trusted registry.
+/// Rejects duplicates, malformed entries and invalid signatures.
+pub fn verify_signed_review_history(journal: &Journal, registry: &Registry) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
+    for entry in journal.entries().iter().filter(|entry| entry.kind == "signed_review") {
+        let fields: Vec<&str> = entry.payload.split('|').collect();
+        if fields.len() != 6 || !seen.insert(fields[0]) {
+            return Err("malformed or duplicate signed review".into());
+        }
+        let accepted = match fields[4] {
+            "accepted" => true,
+            "rejected" => false,
+            _ => return Err("invalid signed review decision".into()),
+        };
+        let hex = fields[5].as_bytes();
+        if hex.len() != 128 {
+            return Err("invalid signature length".into());
+        }
+        let mut signature = [0u8; 64];
+        for (index, pair) in hex.chunks_exact(2).enumerate() {
+            let digit = |byte: u8| -> Option<u8> {
+                match byte {
+                    b'0'..=b'9' => Some(byte - b'0'),
+                    b'a'..=b'f' => Some(byte - b'a' + 10),
+                    _ => None,
+                }
+            };
+            signature[index] = (digit(pair[0]).ok_or("invalid hex")? << 4)
+                | digit(pair[1]).ok_or("invalid hex")?;
+        }
+        let message = signed_review_message(fields[0], fields[2], fields[3], accepted);
+        if !authorized_review(registry, fields[1], &message, &signature) {
+            return Err("signed review verification failed".into());
+        }
+    }
+    Ok(())
+}
+
 pub fn signed_mission_demo() -> Result<(i64, usize), String> {
     let reviewer = Identity::generate();
     let mut registry = Registry::default();
