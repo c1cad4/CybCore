@@ -45,9 +45,7 @@ pub fn execute_verified_task(input: &str) -> Result<(String, Memory, Journal), S
         .append(&proposal.author, &proposal.source, &proposal.claim)
         .map_err(|err| format!("memory failed: {err:?}"))?;
     let mut journal = Journal::default();
-    journal
-        .append("task", &task.id)
-        .map_err(str::to_owned)?;
+    journal.append("task", &task.id).map_err(str::to_owned)?;
     journal
         .append("review", "accepted")
         .map_err(str::to_owned)?;
