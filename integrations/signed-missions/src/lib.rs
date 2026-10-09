@@ -90,9 +90,7 @@ pub fn persist_signed_mission_audit(path: &Path) -> Result<(), String> {
     journal
         .append("mission", "m1:completed:proof1")
         .map_err(str::to_owned)?;
-    journal
-        .append("review", "r1:reviewer:accepted")
-        .map_err(str::to_owned)?;
+    append_review_once(&mut journal, "r1", "worker", "proof1", true)?;
     journal
         .append("trust", &format!("worker:{score}"))
         .map_err(str::to_owned)?;
@@ -103,6 +101,9 @@ pub fn persist_signed_mission_audit(path: &Path) -> Result<(), String> {
     let loaded = cybmemory::load_checked(path).map_err(|e| e.to_string())?;
     if loaded.entries() != journal.entries() {
         return Err("audit journal mismatch".into());
+    }
+    if replay_review_score(&loaded, "worker")? != score {
+        return Err("replayed score mismatch".into());
     }
     Ok(())
 }
@@ -201,7 +202,7 @@ mod tests {
         persist_signed_mission_audit(&path).unwrap();
         let journal = cybmemory::load_checked(&path).unwrap();
         assert_eq!(journal.find_kind("mission").len(), 1);
-        assert_eq!(journal.find_kind("review").len(), 1);
+        assert_eq!(journal.find_kind("review_event").len(), 1);
         assert_eq!(journal.find_kind("trust").len(), 1);
         assert_eq!(journal.find_kind("growth").len(), 1);
         std::fs::remove_file(path).unwrap();
