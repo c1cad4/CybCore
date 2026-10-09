@@ -149,11 +149,8 @@ pub fn encode_witness(witness: &Witness) -> Vec<u8> {
 }
 
 pub fn decode_witness(bytes: &[u8]) -> Result<Witness, &'static str> {
-    if !bytes.starts_with(b"CYBWIT1") {
-        return Err("invalid witness header");
-    }
     match bytes {
-        b"CYBWIT1\\x00" => Ok(Witness::default()),
+        b"CYBWIT1\x00" => Ok(Witness::default()),
         [b'C', b'Y', b'B', b'W', b'I', b'T', b'1', 1, rest @ ..] if rest.len() == 40 => {
             let mut count_bytes = [0u8; 8];
             count_bytes.copy_from_slice(&rest[..8]);
@@ -184,9 +181,8 @@ pub fn save_witness(witness: &Witness, path: &std::path::Path) -> std::io::Resul
 
 pub fn load_witness(path: &std::path::Path) -> std::io::Result<Witness> {
     let bytes = std::fs::read(path)?;
-    decode_witness(&bytes).map_err(|error| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-    })
+    decode_witness(&bytes)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
 }
 
 #[cfg(test)]
