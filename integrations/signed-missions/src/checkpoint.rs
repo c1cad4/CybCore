@@ -347,6 +347,53 @@ pub fn recover_pending_checkpoint(
     Ok(checkpoint)
 }
 
+
+/// Commit with a durable pending checkpoint marker. A crash after writing
+/// the marker can be inspected with recover_pending_checkpoint.
+pub fn commit_witnessed_journal_with_intent(
+    transaction_lock: &std::path::Path,
+    journal_path: &std::path::Path,
+    witness_path: &std::path::Path,
+    pending_path: &std::path::Path,
+    journal: &Journal,
+    registry: &Registry,
+    checkpoint: &Checkpoint,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    with_audit_transaction_lock(transaction_lock, || {
+        verify_checkpoint(journal, registry, checkpoint)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        if pending_path.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "unresolved pending audit transaction",
+            ));
+        }
+        if witness_path.exists() {
+            let witness = load_witness(witness_path)?;
+            if let Some((count, digest)) = witness.latest() {
+                if checkpoint.count < count
+                    || (checkpoint.count == count && checkpoint.digest != digest)
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "checkpoint rollback or fork",
+                    ));
+                }
+            }
+        }
+        let mut marker = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(pending_path)?;
+        marker.write_all(&encode_pending_checkpoint(checkpoint))?;
+        marker.sync_all()?;
+        cybmemory::save_checked_locked(journal, journal_path)?;
+        observe_witness_locked(witness_path, journal, registry, checkpoint)?;
+        std::fs::remove_file(pending_path)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
