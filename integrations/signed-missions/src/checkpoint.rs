@@ -132,7 +132,6 @@ impl Witness {
     }
 }
 
-
 /// Serialize the witness watermark for storage independent of the journal.
 /// A valid signature must still be checked against the current registry.
 pub fn encode_witness(witness: &Witness) -> Vec<u8> {
