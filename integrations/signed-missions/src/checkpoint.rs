@@ -414,6 +414,42 @@ pub fn finalize_pending_checkpoint(
     })
 }
 
+/// Verify the journal, witness and checkpoint under the same transaction
+/// lock used by cooperative writers, preventing a torn concurrent read.
+pub fn recover_witnessed_journal_locked(
+    transaction_lock: &std::path::Path,
+    journal_path: &std::path::Path,
+    witness_path: &std::path::Path,
+    registry: &Registry,
+    checkpoint: &Checkpoint,
+) -> std::io::Result<Journal> {
+    with_audit_transaction_lock(transaction_lock, || {
+        recover_witnessed_journal(journal_path, witness_path, registry, checkpoint)
+    })
+}
+
+/// Complete a prepared transaction only if its journal and signed intent
+/// agree; otherwise preserve the marker for explicit operator recovery.
+pub fn recover_or_reject_pending(
+    transaction_lock: &std::path::Path,
+    journal_path: &std::path::Path,
+    witness_path: &std::path::Path,
+    pending_path: &std::path::Path,
+    registry: &Registry,
+) -> std::io::Result<bool> {
+    if !pending_path.exists() {
+        return Ok(false);
+    }
+    finalize_pending_checkpoint(
+        transaction_lock,
+        journal_path,
+        witness_path,
+        pending_path,
+        registry,
+    )?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
