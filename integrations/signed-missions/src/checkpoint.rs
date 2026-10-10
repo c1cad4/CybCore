@@ -175,7 +175,8 @@ pub fn save_witness(witness: &Witness, path: &std::path::Path) -> std::io::Resul
         .open(&temporary)?;
     file.write_all(&encode_witness(witness))?;
     file.sync_all()?;
-    std::fs::rename(temporary, path)
+    std::fs::rename(temporary, path)?;
+    sync_parent(path)
 }
 
 pub fn load_witness(path: &std::path::Path) -> std::io::Result<Witness> {
@@ -350,6 +351,19 @@ pub fn recover_pending_checkpoint(
     Ok(checkpoint)
 }
 
+/// Synchronize a parent directory after renaming or removing a durable
+/// marker. On platforms without directory sync support, propagate the error.
+fn sync_parent(path: &std::path::Path) -> std::io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::File::open(parent)?.sync_all()
+}
+
+/// Remove a completed intent and sync its parent directory.
+fn remove_completed_intent(path: &std::path::Path) -> std::io::Result<()> {
+    std::fs::remove_file(path)?;
+    sync_parent(path)
+}
+
 /// Commit with a durable pending checkpoint marker. A crash after writing
 /// the marker can be inspected with recover_pending_checkpoint.
 pub fn commit_witnessed_journal_with_intent(
@@ -390,9 +404,10 @@ pub fn commit_witnessed_journal_with_intent(
             .open(pending_path)?;
         marker.write_all(&encode_pending_checkpoint(checkpoint))?;
         marker.sync_all()?;
+        sync_parent(pending_path)?;
         cybmemory::save_checked_locked(journal, journal_path)?;
         observe_witness_locked(witness_path, journal, registry, checkpoint)?;
-        std::fs::remove_file(pending_path)
+        remove_completed_intent(pending_path)
     })
 }
 
