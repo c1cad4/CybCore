@@ -1,0 +1,15 @@
+[package]
+name = "cybcore-signed-missions"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+cybidentity = { git = "https://github.com/c1cad4/CybIdentity", branch = "feat/identity-keypair-v1" }
+cybmissions = { git = "https://github.com/c1cad4/CybMissions", branch = "feat/mission-lifecycle" }
+cybtrust = { git = "https://github.com/c1cad4/CybTrust", branch = "feat/evidence-reputation" }
+cybgrowth = { git = "https://github.com/c1cad4/CybGrowth", branch = "feat/contribution-ledger" }
+cybregistry = { git = "https://github.com/c1cad4/CybRegistry", branch = "feat/agent-directory-v1" }
+cybmemory = { git = "https://github.com/c1cad4/CybMemory", branch = "feat/journal-v1" }
+sha2 = "0.10"
+fs2 = "0.4"
