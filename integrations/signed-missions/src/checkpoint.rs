@@ -718,6 +718,48 @@ mod tests {
     }
 
     #[test]
+    fn pending_recovery_is_idempotent() {
+        let identity = Identity::generate();
+        let registry = registry_for(&identity);
+        let base = std::env::temp_dir().join(format!("cybcore-idempotent-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let journal_path = base.join("journal.bin");
+        let witness_path = base.join("witness.bin");
+        let pending_path = base.join("pending.bin");
+        let lock_path = base.join("transaction.lock");
+        let mut journal = Journal::default();
+        journal.append("mission", "m1").unwrap();
+        let checkpoint = sign_checkpoint(&journal, "auditor", &identity);
+        std::fs::write(&pending_path, encode_pending_checkpoint(&checkpoint)).unwrap();
+        cybmemory::save_checked_locked(&journal, &journal_path).unwrap();
+        assert!(recover_or_reject_pending(
+            &lock_path,
+            &journal_path,
+            &witness_path,
+            &pending_path,
+            &registry,
+        )
+        .unwrap());
+        assert!(!recover_or_reject_pending(
+            &lock_path,
+            &journal_path,
+            &witness_path,
+            &pending_path,
+            &registry,
+        )
+        .unwrap());
+        recover_witnessed_journal_locked(
+            &lock_path,
+            &journal_path,
+            &witness_path,
+            &registry,
+            &checkpoint,
+        )
+        .unwrap();
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn rejects_unauthorized_signer() {
         let identity = Identity::generate();
         let registry = Registry::default();
