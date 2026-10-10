@@ -213,8 +213,14 @@ pub fn observe_witness_locked(
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
         save_witness(&witness, witness_path)
     })();
-    FileExt::unlock(&lock)?;
-    result
+    let unlock = FileExt::unlock(&lock);
+    match result {
+        Err(error) => Err(error),
+        Ok(value) => {
+            unlock?;
+            Ok(value)
+        }
+    }
 }
 
 /// Load a journal and require its externally witnessed watermark to match.
@@ -255,8 +261,39 @@ pub fn with_audit_transaction_lock<T>(
         .open(lock_path)?;
     file.lock_exclusive()?;
     let result = action();
-    FileExt::unlock(&file)?;
-    result
+    let unlock = FileExt::unlock(&file);
+    match result {
+        Err(error) => Err(error),
+        Ok(value) => {
+            unlock?;
+            Ok(value)
+        }
+    }
+}
+
+/// Execute an operation while the transaction lock is held, returning
+/// the original operation error even if unlocking also fails.
+pub fn with_audit_transaction_lock_preserving_error<T>(
+    lock_path: &std::path::Path,
+    action: impl FnOnce() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    use fs2::FileExt;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)?;
+    file.lock_exclusive()?;
+    let result = action();
+    let unlock = FileExt::unlock(&file);
+    match result {
+        Err(error) => Err(error),
+        Ok(value) => {
+            unlock?;
+            Ok(value)
+        }
+    }
 }
 
 /// Commit a prepared journal and matching checkpoint while coordinating
